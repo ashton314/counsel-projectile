@@ -845,6 +845,55 @@ of `(ivy-thing-at-point)' by hitting \"M-n\" in the minibuffer."
   "Switch project action for `counsel-projectile-rg'."
   (counsel-projectile-switch-project 'counsel-projectile-switch-project-action-rg))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Consider creating a variable that remembers the last directory given ;;
+;; to the rg-subdir function. That way, on successive calls the user    ;;
+;; could keep using the subdirectory.                                   ;;
+;;                                                                      ;;
+;; Alternativley, find a way to add a counsel command to limit searches ;;
+;; to a particular subdirectory.                                        ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun counsel-projectile-rg-subdir (prefix)
+  "Search the current project with rg.
+
+If called with a prefix argument, prompt the user for a
+subdirectory of the project to search.
+
+If called with two prefix arguments (`C-u C-u`) prompt user for
+the subdirectory AND extra arguments to pass to rg."
+  (interactive "P")
+  (if (and (eq projectile-require-project-root 'prompt)
+           (not (projectile-project-p)))
+      (counsel-projectile-rg-action-switch-project)
+    (let* ((ivy--actions-list (copy-sequence ivy--actions-list))
+           (dir-to-search (if prefix
+                              (read-file-name "Subdirectory to search: " (projectile-project-root) nil t "" #'directory-name-p)
+                            (projectile-project-root)))
+           (extra-args (if (equal prefix '(16)) (read-string "Extra arguments for rg: ")))
+           (ignored
+            (mapconcat (lambda (i)
+                         (concat "--glob !" (shell-quote-argument i)))
+                       (append
+                        (projectile--globally-ignored-file-suffixes-glob)
+                        (projectile-ignored-files-rel)
+                        (projectile-ignored-directories-rel))
+                       " "))
+           (counsel-rg-base-command
+            (let ((counsel-ag-command counsel-rg-base-command))
+              (counsel--format-ag-command ignored "%s"))))
+      (ivy-add-actions
+       'counsel-rg
+       counsel-projectile-rg-extra-actions)
+      (counsel-rg (eval counsel-projectile-rg-initial-input)
+                  dir-to-search
+                  extra-args
+                  (projectile-prepend-project-name
+                   (concat (car (if (listp counsel-rg-base-command)
+                                    counsel-rg-base-command
+                                  (split-string counsel-rg-base-command)))
+                           ": "))))))
+
+
 ;;;###autoload
 (defun counsel-projectile-rg (&optional options)
   "Search the current project with rg.
